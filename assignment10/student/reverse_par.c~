@@ -1,0 +1,92 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <mpi.h>
+#include "helper.h"
+
+int *ReverseArray(int *orig,int b)
+{
+    int swap;
+     
+    for(int a = 0;a<--b;a++) 
+    {
+        swap=orig[a];       
+        orig[a]=orig[b];    
+        orig[b]=swap; 
+    }
+     
+    return orig;
+}
+
+
+
+void reverse(char *str, int strlen)
+{
+	// parallelize this function and make sure to call reverse_str()
+	// on each processor to reverse the substring.
+	
+    int np, rank;
+    int *sendcounts;    // array describing how many elements to send to each process
+    int *displs;        // array describing the displacements where each segment begins
+    int rem;		// elements remaining after division among processes
+    
+    int sum = 0;                // Sum of counts. Used to calculate displacements
+    char rec_buf[100];          // buffer where the received data should be stored
+    char reclast_buf[100];
+    MPI_Comm_size(MPI_COMM_WORLD, &np);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    rem = strlen % np; 
+    sendcounts = malloc(sizeof(int)*np);
+    displs = malloc(sizeof(int)*np);
+    // calculate send counts and displacements
+    for (int i = 0; i < np; i++) {
+        sendcounts[i] = strlen / np;
+        if (rem > 0) {
+            sendcounts[i]++;
+            rem--;
+        }
+
+        displs[i] = sum;
+        sum += sendcounts[i];
+    }
+
+	//displs = ReverseArray(displs,np);
+	//sendcounts = ReverseArray(sendcounts,np);
+
+	MPI_Scatterv(str, sendcounts, displs, MPI_CHAR, rec_buf, 100, MPI_CHAR, 0, MPI_COMM_WORLD);
+
+        //printf("%s\t %d",rec_buf,sendcounts[rank]);
+	reverse_str(rec_buf, sendcounts[rank]);
+	
+        //printf("%s\t %d\n",rec_buf,rank);
+	
+
+	if (rank != 0)
+	{
+		MPI_Send(rec_buf, 100 , MPI_CHAR, 0 , 0, MPI_COMM_WORLD);
+	}
+
+    if (rank == 0)
+    { 
+	memcpy(str + strlen - sendcounts[0],rec_buf,sizeof(char)*sendcounts[0]); // destination pointer, source pointer, size to be copied(here it is equal to block size i.e sendcount[0] for process 0) 
+	//strcat(strcp, rec_buf);
+	for (int i = 1 ; i < np; i++)
+	{       printf("%s\n",str);
+		MPI_Recv(reclast_buf, 100, MPI_CHAR, i, 0, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+                memcpy(str+(strlen - displs[(i+1)%np])%strlen,reclast_buf,sizeof(char)*sendcounts[i]);
+		//memcpy(str+sendcounts[i-1],reclast_buf,sizeof(char)*sendcounts[i]);
+			 //printf("%s\n",str);
+		
+	}
+
+    	//strcpy(str,strcp);
+	//printf("%s\n",str);
+
+    }
+
+	 free(sendcounts);
+         free(displs);
+
+    
+}
